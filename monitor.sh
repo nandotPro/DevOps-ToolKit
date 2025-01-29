@@ -64,48 +64,211 @@ info_sistema() {
     echo -e "Nome do computador: $(hostname)"
 }
 
+# Função para identificar melhor os processos Node.js
+identificar_nodejs() {
+    local cmd="$1"
+    if [[ "$cmd" == *"next"* ]]; then
+        echo "Next.js (Servidor de desenvolvimento)"
+    elif [[ "$cmd" == *"react-scripts"* ]]; then
+        echo "React (Servidor de desenvolvimento)"
+    elif [[ "$cmd" == *"vscode"* ]] || [[ "$cmd" == *"code"* ]]; then
+        echo "VS Code (Editor)"
+    elif [[ "$cmd" == *"npm"* ]]; then
+        echo "NPM (Gerenciador de pacotes Node.js)"
+    else
+        # Tenta pegar o nome do script que está rodando
+        local script_name=$(echo "$cmd" | grep -o '[^/]*\.js' || echo "Node.js")
+        echo "Node.js - $script_name"
+    fi
+}
+
 # Função para monitorar CPU
 monitorar_cpu() {
-    echo -e "\n${VERDE}=== Uso de CPU ===${RESET}"
-    echo -e "Processos: $(ps aux | wc -l)"
-    top -bn1 | grep "Cpu(s)" | awk '{print "CPU em uso: " $2 "%"}'
-    echo -e "\nTop 5 processos por CPU:"
-    ps aux | sort -nr -k 3 | head -5 | awk '{print $2,$3"%",$11}'
+    echo -e "\n${VERDE}=== Uso do Processador ===${RESET}"
+    echo -e "Total de programas em execução: $(ps aux | wc -l)"
+    
+    # Uso total da CPU de forma mais amigável
+    cpu_usage=$(top -bn1 | grep "Cpu(s)" | awk '{print $2}')
+    echo -e "Processador em uso: ${cpu_usage}%"
+    
+    echo -e "\n5 programas usando mais processamento:"
+    ps aux | sort -nr -k 3 | head -5 | while read user pid cpu mem vsz rss tty stat start time cmd; do
+        case "$cmd" in
+            *"node"*)
+                nome=$(identificar_nodejs "$cmd")
+                ;;
+            *"firefox"*)
+                nome="Firefox (Navegador)"
+                ;;
+            *"chrome"*)
+                nome="Google Chrome (Navegador)"
+                ;;
+            *"python"*)
+                nome="Python (Programa/Script)"
+                ;;
+            *"bash"*)
+                nome="Terminal"
+                ;;
+            *)
+                nome="$cmd"
+                ;;
+        esac
+        printf "%-50s %6.1f%%\n" "$nome" "$cpu"
+    done
 }
 
 # Função para monitorar memória
 monitorar_memoria() {
-    echo -e "\n${VERDE}=== Uso de Memória ===${RESET}"
-    free -h | awk '/^Mem/ {print "Total: " $2 "\nUsado: " $3 "\nLivre: " $4 "\nBuffer/Cache: " $6}'
-    echo -e "\nTop 5 processos por uso de memória:"
-    ps aux | sort -nr -k 4 | head -5 | awk '{print $2,$4"%",$11}'
+    echo -e "\n${VERDE}=== Uso da Memória RAM ===${RESET}"
+    
+    # Converte valores para GB e arredonda para 2 casas decimais
+    total=$(free -g | awk '/^Mem/ {printf "%.1f", $2}')
+    usado=$(free -g | awk '/^Mem/ {printf "%.1f", $3}')
+    livre=$(free -g | awk '/^Mem/ {printf "%.1f", $4}')
+    cache=$(free -g | awk '/^Mem/ {printf "%.1f", $6}')
+    
+    echo -e "Memória Total: ${total}GB"
+    echo -e "Memória em Uso: ${usado}GB"
+    echo -e "Memória Livre: ${livre}GB"
+    echo -e "Memória em Cache: ${cache}GB"
+    
+    echo -e "\n5 programas usando mais memória:"
+    ps aux | sort -nr -k 4 | head -5 | while read user pid cpu mem vsz rss tty stat start time cmd; do
+        case "$cmd" in
+            *"node"*)
+                nome=$(identificar_nodejs "$cmd")
+                ;;
+            *"firefox"*)
+                nome="Firefox (Navegador)"
+                ;;
+            *"chrome"*)
+                nome="Google Chrome (Navegador)"
+                ;;
+            *"code"*)
+                nome="VS Code (Editor de código)"
+                ;;
+            *"python"*)
+                nome="Python (Programa/Script)"
+                ;;
+            *"bash"*)
+                nome="Terminal"
+                ;;
+            *)
+                nome="$cmd"
+                ;;
+        esac
+        printf "%-50s %6.1f%%\n" "$nome" "$mem"
+    done
 }
 
 # Função para monitorar disco
 monitorar_disco() {
-    echo -e "\n${VERDE}=== Uso de Disco ===${RESET}"
-    df -h | grep -v "tmpfs" | awk 'BEGIN {print "Montagem\tTotal\tUsado\tLivre\tUso%"} 
-        NR>1 {print $6"\t"$2"\t"$3"\t"$4"\t"$5}'
+    echo -e "\n${VERDE}=== Armazenamento ===${RESET}"
     
-    echo -e "\nMaiores diretórios em /:"
-    du -h / 2>/dev/null | sort -rh | head -5
+    echo -e "Unidades conectadas:"
+    
+    # Lista apenas as unidades importantes e com descrições amigáveis
+    df -h | grep -E '/mnt/[c-z]|/$' | while read fs size used avail use mnt; do
+        case "$mnt" in
+            "/mnt/c")
+                echo -e "Windows (C:)\t$size\t$used usado\t$avail livre\t$use em uso"
+                ;;
+            "/mnt/d")
+                echo -e "Dados (D:)\t$size\t$used usado\t$avail livre\t$use em uso"
+                ;;
+            "/")
+                echo -e "Ubuntu WSL\t$size\t$used usado\t$avail livre\t$use em uso"
+                ;;
+            *)
+                # Para outros discos que possam existir (E:, F:, etc)
+                letra=${mnt##*/}
+                letra=${letra^^} # Converte para maiúsculo
+                echo -e "Unidade ($letra:)\t$size\t$used usado\t$avail livre\t$use em uso"
+                ;;
+        esac
+    done
+    
+    # Removendo a parte que estava travando e substituindo por algo mais útil
+    echo -e "\nPastas grandes no seu Ubuntu WSL:"
+    du -h /home 2>/dev/null | sort -rh | head -3 | while read size path; do
+        echo -e "$(basename $path)\t$size"
+    done
 }
 
 # Função para monitorar rede
 monitorar_rede() {
     echo -e "\n${VERDE}=== Informações de Rede ===${RESET}"
-    echo -e "Interfaces de rede:"
-    ip -br addr show
-    echo -e "\nConexões ativas:"
-    netstat -tun | awk 'NR>2 {print $4,$5}'
-    echo -e "\nBandwidth por interface:"
-    for interface in $(ls /sys/class/net/); do
+    
+    # Verifica conexão com a internet
+    if ping -c 1 8.8.8.8 >/dev/null 2>&1; then
+        echo -e "${VERDE}✓ Internet conectada${RESET}"
+    else
+        echo -e "${VERMELHO}✗ Sem conexão com a internet${RESET}"
+    fi
+    
+    echo -e "\nAdaptadores de rede ativos:"
+    # Lista interfaces de rede de forma mais amigável
+    ip -br addr show | while read line; do
+        interface=$(echo $line | awk '{print $1}')
+        status=$(echo $line | awk '{print $2}')
+        ip=$(echo $line | awk '{print $3}')
+        
+        case "$interface" in
+            "lo")
+                # Ignora interface de loopback
+                continue
+                ;;
+            "eth"*)
+                nome="Conexão Ethernet"
+                ;;
+            "wlan"*)
+                nome="Conexão Wi-Fi"
+                ;;
+            "wsl"*)
+                nome="Conexão WSL"
+                ;;
+            *)
+                nome="Conexão $interface"
+                ;;
+        esac
+        
+        if [ "$status" = "UP" ]; then
+            echo -e "${VERDE}$nome: Conectado${RESET}"
+            if [ ! -z "$ip" ]; then
+                echo -e "   Endereço IP: $ip"
+            fi
+        else
+            echo -e "${VERMELHO}$nome: Desconectado${RESET}"
+        fi
+    done
+    
+    echo -e "\nUso da rede:"
+    # Mostra uso de rede de forma mais amigável
+    for interface in $(ls /sys/class/net/ | grep -v "lo"); do
         rx=$(cat /sys/class/net/$interface/statistics/rx_bytes 2>/dev/null)
         tx=$(cat /sys/class/net/$interface/statistics/tx_bytes 2>/dev/null)
         if [ ! -z "$rx" ] && [ ! -z "$tx" ]; then
-            echo "$interface - RX: $(numfmt --to=iec $rx)B TX: $(numfmt --to=iec $tx)B"
+            case "$interface" in
+                "eth"*)
+                    nome="Ethernet"
+                    ;;
+                "wlan"*)
+                    nome="Wi-Fi"
+                    ;;
+                "wsl"*)
+                    nome="WSL"
+                    ;;
+                *)
+                    nome="$interface"
+                    ;;
+            esac
+            echo -e "$nome:"
+            echo -e "   Recebido: $(numfmt --to=iec $rx)B"
+            echo -e "   Enviado:  $(numfmt --to=iec $tx)B"
         fi
     done
+    
+    echo -e "\nConexões ativas: $(netstat -tn | grep ESTABLISHED | wc -l)"
 }
 
 # Loop principal
