@@ -11,19 +11,57 @@ RESET='\033[0m'
 mostrar_cabecalho() {
     clear
     echo -e "${AZUL}=============================================${RESET}"
-    echo -e "${VERDE}         MONITOR AVANÇADO DO SISTEMA        ${RESET}"
-    echo -e "${AZUL}=============================================${RESET}"
+    
+    # Detecta se está rodando no WSL
+    if grep -qi microsoft /proc/version; then
+        echo -e "${VERDE}     MONITOR DO SISTEMA - WSL     ${RESET}"
+        echo -e "${AZUL}=============================================${RESET}"
+        echo -e "${AMARELO}Nota: Estas informações são do WSL,${RESET}"
+        echo -e "${AMARELO}não do Windows host${RESET}"
+    else
+        echo -e "${VERDE}         MONITOR DO SISTEMA        ${RESET}"
+        echo -e "${AZUL}=============================================${RESET}"
+    fi
+    
     echo -e "${AMARELO}Data: $(date +%d/%m/%Y)${RESET}"
     echo -e "${AMARELO}Hora: $(date +%H:%M:%S)${RESET}"
 }
 
 # Função para informações do sistema
 info_sistema() {
-    echo -e "\n${VERDE}=== Informações do Sistema ===${RESET}"
-    echo -e "Sistema: $(uname -a)"
-    echo -e "Uptime: $(uptime -p)"
-    echo -e "Kernel: $(uname -r)"
-    echo -e "Hostname: $(hostname)"
+    echo -e "\n${VERDE}=== Informações Básicas do Computador ===${RESET}"
+    
+    # Versão do sistema operacional
+    OS=$(uname -s)
+    case "$OS" in
+        "Linux")
+            if [ -f /etc/os-release ]; then
+                OS=$(grep "PRETTY_NAME" /etc/os-release | cut -d'"' -f2)
+            fi
+            ;;
+        "Darwin")
+            OS="macOS $(sw_vers -productVersion)"
+            ;;
+    esac
+    echo -e "Sistema Operacional: $OS"
+    
+    # Tempo ligado 
+    uptime_str=$(uptime -p)
+    uptime_str=${uptime_str//up /}
+    uptime_str=${uptime_str// days/d}
+    uptime_str=${uptime_str// day/d}
+    uptime_str=${uptime_str// hours/h}
+    uptime_str=${uptime_str// hour/h}
+    uptime_str=${uptime_str// minutes/m}
+    uptime_str=${uptime_str// minute/m}
+    echo -e "Tempo ligado: $uptime_str"
+    
+    # Versão do kernel 
+    kernel_version=$(uname -r)
+    echo -e "Versão do sistema(Kernel): ${kernel_version%%-*}"
+    
+    # Nome do computador
+    echo -e "Nome do computador: $(hostname)"
 }
 
 # Função para monitorar CPU
